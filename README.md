@@ -1,6 +1,5 @@
 # AAIR_Job_Crawler
-
-A small developer guide to run and test the project locally (Windows / PowerShell).
+Collect data from Hiring Caffe job posting 
 
 ## Overview
 This repository contains web crawlers and helpers to collect job data (examples: hiring.cafe and Apollo crawlers). Key folders:
