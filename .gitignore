@@ -55,6 +55,7 @@ node_modules/
 
 # Project-specific sensitive / large files (adjust as needed)
 apollo_cookies.json
+apolo_state.json
 apollo_profile/
 apollo_html/
 results/
