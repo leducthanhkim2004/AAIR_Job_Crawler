@@ -31,7 +31,7 @@ python -m venv .venv
 ```
 
 2) Install dependencies
-If you have `requirements.txt` (recommended):
+
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -45,11 +45,7 @@ python -m pip install -r requirements.txt
 python -m playwright install
 ```
 
-4) (Optional) Install package in editable mode so `web_Crawler` imports resolve everywhere
 
-```powershell
-python -m pip install -e .
-```
 
 ## Configuration
 Main config file (example) is at:
@@ -58,7 +54,6 @@ Main config file (example) is at:
 web_Crawler/config/hiring_caffe_config.yaml
 ```
 
-Load this config using the utilities (e.g., `web_Crawler.utils.utils.load_config(path)`). Some scripts accept a `SAVE_ROOT_DIR` config value to change where logs/results are written.
 
 ## Run crawlers
 - Hiring.cafe crawler (package-aware run):
