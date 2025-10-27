@@ -61,3 +61,5 @@ apollo_html/
 results/
 downloads/
 playwright_profile/
+crawled_data/
+playwright_profile/
