@@ -48,7 +48,7 @@ web_Crawler/config/hiring_caffe_config.yaml
 - Hiring.cafe crawler (package-aware run): running this command 
 
 ```
-python -m web_Crawler.crawl_website._hiring_caffe_crawl
+python -m web_Crawler.crawl_website.main
 ```
 
 
