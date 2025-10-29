@@ -1,8 +1,3 @@
-Absolutely ✅ — here’s your **ready-to-paste Markdown version** of the rewritten README:
-
----
-
-````markdown
 # 🧠 AAIR Job Crawler
 
 A modular, Playwright-powered crawler for extracting job data from **HiringCafe**, serving as the **data ingestion foundation** for an upcoming **AI-based job interview agent in Vietnam**.
@@ -11,21 +6,21 @@ A modular, Playwright-powered crawler for extracting job data from **HiringCafe*
 
 ## 📁 Project Structure
 
-| Folder | Description |
-|---------|-------------|
-| `web_Crawler/crawl_website/` | Core crawlers, parsers, and site-specific logic |
-| `web_Crawler/utils/` | Shared utilities — logging, folder setup, YAML config, etc. |
-| `apolo_Crawl/` | Apollo.io crawler assets and browser profile data |
-| `web_Crawler/config/hiring_caffe_config.yaml` | Main configuration file |
-| `crawled_data/` | Output directory for crawled results and logs |
+| Folder                                        | Description                                                 |
+| --------------------------------------------- | ----------------------------------------------------------- |
+| `web_Crawler/crawl_website/`                  | Core crawlers, parsers, and site-specific logic             |
+| `web_Crawler/utils/`                          | Shared utilities — logging, folder setup, YAML config, etc. |
+| `apolo_Crawl/`                                | Apollo.io crawler assets and browser profile data           |
+| `web_Crawler/config/hiring_caffe_config.yaml` | Main configuration file                                     |
+| `crawled_data/`                               | Output directory for crawled results and logs               |
 
 ---
 
 ## ⚙️ Prerequisites
 
-- **Python** ≥ 3.8  
-- **Git**
-- **Internet connection** (Playwright browser download required)
+* **Python** ≥ 3.8
+* **Git**
+* **Internet connection** (Playwright browser download required)
 
 ---
 
@@ -34,10 +29,11 @@ A modular, Playwright-powered crawler for extracting job data from **HiringCafe*
 Run all commands from the **repository root**.
 
 ### 1️⃣ Create & activate a virtual environment
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-````
+```
 
 ### 2️⃣ Install dependencies
 
@@ -91,7 +87,7 @@ config = load_config("web_Crawler/config/hiring_caffe_config.yaml")
 
 ---
 
-## 🧩 Running the Crawler
+## 🧙‍♂️ Running the Crawler
 
 Always run from the **repository root** to ensure package imports work properly.
 
@@ -111,7 +107,7 @@ This command will:
 
 ---
 
-## 🪵 Debug & Logging
+## 🧥 Debug & Logging
 
 * Logs are saved automatically under:
 
@@ -148,12 +144,12 @@ Example:
 ```
 data/
  ├── result_it_vn/
- │   ├── job_links_all_safe_dynamic.json
- │   ├── 6d9a12c3e9f3.json
- │   └── ...
- └── logs_it_vn/
-     ├── run_2025-10-30.log
-     └── latest.log
+ │   ├─ job_links_all_safe_dynamic.json
+ │   ├─ 6d9a12c3e9f3.json
+ │   └─ ...
+ └─ logs_it_vn/
+     ├─ run_2025-10-30.log
+     └─ latest.log
 ```
 
 ---
@@ -182,8 +178,4 @@ data/
 ---
 
 **Developed with ❤️ by AAIR Lab**
-*Vietnamese-German University — Applied AI Research Lab (AAIR)*
-
-```
-
----
+_Vietnamese-German University — Applie
