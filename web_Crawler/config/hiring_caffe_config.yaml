@@ -1,7 +1,6 @@
-BASE_URL: "https://hiring.cafe"
-SITEMAP_URL: "https://hiring.cafe/sitemap-job-titles.xml"
 # BROWSER CONFIGURATION
-TIMEOUT : 100  # seconds
+BASE_URL : "https://hiring.cafe/"
+TIMEOUT : 100000 # seconds
 HEADERS:
   User-Agent: >-
     Mozilla/5.0 (Windows NT 10.0; Win64; x64)

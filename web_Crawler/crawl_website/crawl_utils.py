@@ -1,7 +1,5 @@
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
-import time, json
-import os
 import re
 from datetime import datetime, timedelta
 
@@ -33,14 +31,14 @@ def parse_posted_date_text(text: str, now: datetime | None = None) -> str | None
         else:
             delta = timedelta(minutes=n)
         dt = now - delta
-        return dt.strftime("%Y-%m-%d ")
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # single-word cases
     if re.search(r'\byesterday\b', s, flags=re.I):
         dt = now - timedelta(days=1)
-        return dt.strftime("%Y-%m-%d")
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
     if re.search(r'\btoday\b', s, flags=re.I):
-        return now.strftime("%Y-%m-%d")
+        return now.strftime("%Y-%m-%d %H:%M:%S")
 
     # try common absolute date formats
     for fmt in ("%b %d, %Y", "%B %d, %Y", "%Y-%m-%d", "%d %b %Y"):
@@ -129,25 +127,25 @@ def parse_company_info_table(html):
     return company_info
 
 
-def crawl_full_job_with_tabs(job_url):
-    """Render a full job page and extract Job Info + Company Info (table) + Job Description."""
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+async def crawl_full_job_with_tabs(job_url):
+    """Async version: render a full job page and extract Job Info + Company Info + Job Description + Website."""
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
         print(f"🌐 Opening {job_url}")
-        page.goto(job_url, wait_until="networkidle", timeout=60000)
+        await page.goto(job_url, wait_until="networkidle", timeout=60000)
 
         result = {"job_url": job_url}
 
         # --- Tab 1: Job Info (default) ---
-        html_job = page.content()
+        html_job = await page.content()
         result.update(parse_job_sections(html_job))
 
         # --- Tab 2: Company Info ---
         try:
-            page.click("text=Company Info")
-            page.wait_for_timeout(3000)  # allow JS render
-            html_company = page.content()
+            await page.click("text=Company Info")
+            await page.wait_for_timeout(3000)
+            html_company = await page.content()
             company_data = parse_company_info_table(html_company)
             result["company_info"] = company_data
         except Exception as e:
@@ -156,9 +154,9 @@ def crawl_full_job_with_tabs(job_url):
 
         # --- Tab 3: Job Description ---
         try:
-            page.click("text=Job Description")
-            page.wait_for_timeout(2000)
-            html_desc = page.content()
+            await page.click("text=Job Description")
+            await page.wait_for_timeout(2000)
+            html_desc = await page.content()
             soup_desc = BeautifulSoup(html_desc, "html.parser")
             desc_section = soup_desc.find("div", class_="flex flex-col")
             result["job_description"] = (
@@ -168,84 +166,78 @@ def crawl_full_job_with_tabs(job_url):
             print(f"⚠️ Job Description not found: {e}")
             result["job_description"] = "N/A"
 
-        # --- Website extraction (robust) ---
+        # --- Website extraction (async-safe) ---
         try:
             website_url = None
 
-            # 1) Try to find a visible element labeled "Website" (button or link)
             website_selector_candidates = [
                 'button:has-text("Website")',
                 'a:has-text("Website")',
                 '[role="button"]:has-text("Website")',
-                '[data-test="company-website"]',  # example
+                '[data-test="company-website"]',
             ]
+
             website_elem = None
             for sel in website_selector_candidates:
                 try:
-                    website_elem = page.query_selector(sel)
+                    website_elem = await page.query_selector(sel)
                 except Exception:
                     website_elem = None
                 if website_elem:
                     break
 
-            # 2) If found, try clicking and detect popup or navigation
             if website_elem:
                 try:
-                    # If clicking opens a new tab/window, wait for popup
-                    with page.context.expect_page(timeout=4000) as popup_info:
-                        website_elem.click()  # trigger click
-                    popup = popup_info.value
-                    # wait for popup to load a URL
+                    async with page.context.expect_page(timeout=4000) as popup_info:
+                        await website_elem.click()
+                    popup = await popup_info.value
                     try:
-                        popup.wait_for_load_state("load", timeout=5000)
+                        await popup.wait_for_load_state("load", timeout=5000)
                     except Exception:
                         pass
                     popup_url = popup.url or None
                     if popup_url and popup_url.startswith(("http://", "https://")) and "hiring.cafe" not in popup_url:
                         website_url = popup_url
-                    # close popup (optional)
                     try:
-                        popup.close()
+                        await popup.close()
                     except Exception:
                         pass
                 except Exception:
-                    # no popup => maybe same-page navigation or JS opened link directly
                     try:
-                        # record original URL, click, wait a short time, then check page.url
                         original_url = page.url
-                        website_elem.click()
-                        page.wait_for_timeout(1500)
+                        await website_elem.click()
+                        await page.wait_for_timeout(1500)
                         new_url = page.url
-                        if new_url != original_url and new_url.startswith(("http://", "https://")) and "hiring.cafe" not in new_url:
+                        if (
+                            new_url != original_url
+                            and new_url.startswith(("http://", "https://"))
+                            and "hiring.cafe" not in new_url
+                        ):
                             website_url = new_url
                         else:
-                            # try attributes on the element (href, data-href)
-                            try:
-                                href = website_elem.get_attribute("href")
-                                if not href:
-                                    href = website_elem.get_attribute("data-href") or website_elem.get_attribute("data-url")
-                                if href and href.startswith(("http://", "https://")) and "hiring.cafe" not in href:
-                                    website_url = href
-                            except Exception:
-                                pass
+                            href = await website_elem.get_attribute("href")
+                            if not href:
+                                href = await website_elem.get_attribute("data-href") or await website_elem.get_attribute("data-url")
+                            if href and href.startswith(("http://", "https://")) and "hiring.cafe" not in href:
+                                website_url = href
                     except Exception:
                         pass
 
-            # 3) Fallback: look for nearby anchor with external link (BeautifulSoup fallback)
             if not website_url:
-                html_after = page.content()
+                html_after = await page.content()
                 soup_after = BeautifulSoup(html_after, "html.parser")
-                # first try anchor with text "Website"
                 a = soup_after.find("a", string=re.compile(r'Website', re.I))
                 if a and a.get("href"):
                     href = a["href"]
                     if href.startswith(("http://", "https://")) and "hiring.cafe" not in href:
                         website_url = href
-                # next: look for a button element with Website text and an adjacent anchor
                 if not website_url:
-                    btn = soup_after.find(lambda tag: tag.name in ["button", "div", "span"] and tag.get_text(strip=True) and "website" in tag.get_text(strip=True).lower())
+                    btn = soup_after.find(
+                        lambda tag: tag.name in ["button", "div", "span"]
+                        and tag.get_text(strip=True)
+                        and "website" in tag.get_text(strip=True).lower()
+                    )
                     if btn:
-                        # try to find anchor in parent/siblings
                         parent = btn.parent
                         if parent:
                             link = parent.find("a", href=True)
@@ -253,7 +245,6 @@ def crawl_full_job_with_tabs(job_url):
                                 href = link["href"]
                                 if href.startswith(("http://", "https://")) and "hiring.cafe" not in href:
                                     website_url = href
-                # final fallback: first external anchor not on hiring.cafe
                 if not website_url:
                     for link in soup_after.find_all("a", href=True):
                         href = link["href"]
@@ -266,23 +257,5 @@ def crawl_full_job_with_tabs(job_url):
             print(f"⚠️ Website extraction failed: {e}")
             result["company_website"] = "N/A"
 
-        browser.close()
+        await browser.close()
         return result
-
-
-# --- Example usage ---
-if __name__ == "__main__":
-    job_url = "https://hiring.cafe/viewjob/dxxmss9dwt2gcdfx"  # example job
-    data = crawl_full_job_with_tabs(job_url)
-
-    # derive filename from job id (last path segment) or fallback
-    job_id = job_url.rstrip("/").split("/")[-1] or "job_data"
-    filename = f"{job_id}.json"
-
-    out_path = os.path.join(os.path.dirname(__file__), filename) if "__file__" in globals() else filename
-
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-    print(f"Saved JSON to: {out_path}")
-
