@@ -16,4 +16,4 @@ if __name__ == "__main__":
     config = load_config("C:\\Users\\leduc\\aair_lab\\web_Crawler\\config\\hiring_caffe_config.yaml")
 
     crawler = HiringCaffeITCrawler(config)
-    asyncio.run(crawler.extract_all_job_links_safely())
+    asyncio.run(crawler.crawl_website())
