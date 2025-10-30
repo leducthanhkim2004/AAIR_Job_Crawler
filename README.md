@@ -169,13 +169,7 @@ data/
 
 ---
 
-## 🧠 Future Work
 
-* Add category-wide crawling (`/jobs/it`, `/jobs/marketing`, `/jobs/design`, …)
-* Implement auto-resume checkpointing after crash
-* Integrate with downstream interview agent pipeline (AAIR-LangChain)
-
----
 
 **Developed with ❤️ by AAIR Lab**
-_Vietnamese-German University — Applie
+_Vietnamese-German University 
