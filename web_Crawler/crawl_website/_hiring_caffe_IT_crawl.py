@@ -25,117 +25,127 @@ class HiringCaffeITCrawler(CrawlerBase):
     # =========================================================
     # ✅ New integrated safe function
     # =========================================================
-    async def extract_all_job_links_safely(self):
-        base_url = self.config["BASE_URL"]
-        timeout = self.config.get("TIMEOUT", 60000)
-        all_jobs = set()
-        processed_cards = set()  # store hashes of processed cards
+async def extract_all_job_links_safely(self):
+    base_url = self.config["BASE_URL"]
+    timeout = self.config.get("TIMEOUT", 60000)
+    all_jobs = set()
+    processed_cards = set()
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
-            page = await browser.new_page(viewport={"width": 1440, "height": 900})
-            self.logger.info(f"🌐 Navigating to {base_url}")
-            await page.goto(base_url, wait_until="domcontentloaded", timeout=timeout)
-            await asyncio.sleep(4)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=False)
+        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+        await page.goto(base_url, wait_until="domcontentloaded", timeout=timeout)
+        await asyncio.sleep(5)
 
-            self.logger.info("🌀 Begin infinite scroll + carousel extraction...")
-            last_height = 0
-            stable_rounds = 0
-            scroll_round = 0
+        self.logger.info("🌀 Begin zig-zag scroll crawling (React virtualization bypass)")
 
-            # === Infinite scroll main loop ===
-            while stable_rounds < 3:
-                scroll_round += 1
-                self.logger.info(f"🌀 Scroll round {scroll_round}")
-                await page.evaluate("window.scrollBy(0, window.innerHeight * 0.9)")
-                await asyncio.sleep(2.0)
-
-                # wait for new DOM growth
-                new_height = await page.evaluate("document.body.scrollHeight")
-                if new_height == last_height:
-                    stable_rounds += 1
-                else:
-                    stable_rounds = 0
-                last_height = new_height
-
-                # === Collect job cards after each scroll ===
-                company_cards = await page.query_selector_all(
-                    "div.infinite-scroll-component div.grid > div.relative"
-                )
-                self.logger.info(f"📦 Found {len(company_cards)} cards on screen")
-
-                for idx, card in enumerate(company_cards, start=1):
-                    # avoid reprocessing same DOM elements
+        async def extract_from_visible_cards():
+            """Extract visible + carousel job links from currently rendered cards."""
+            new_added = 0
+            cards = await page.query_selector_all("div.infinite-scroll-component div.grid > div.relative")
+            self.logger.info(f"📦 {len(cards)} visible cards")
+            for card in cards:
+                try:
                     card_html = await card.inner_html()
                     card_hash = hashlib.md5(card_html.encode("utf-8")).hexdigest()
                     if card_hash in processed_cards:
                         continue
                     processed_cards.add(card_hash)
 
-                    async def extract_links_from_card():
-                        anchors = await card.query_selector_all("a[href*='/viewjob/']")
-                        links = []
-                        for a in anchors:
-                            href = await a.get_attribute("href")
-                            if href:
-                                links.append(urljoin(base_url, href))
-                        return links
+                    # --- visible job(s)
+                    anchors = await card.query_selector_all("a[href*='/viewjob/']")
+                    for a in anchors:
+                        href = await a.get_attribute("href")
+                        if href:
+                            full = urljoin(base_url, href)
+                            if full not in all_jobs:
+                                all_jobs.add(full)
+                                new_added += 1
+                                self.logger.info(f"➕ Job link: {full}")
 
-                    # Step 1: visible job(s)
-                    new_links = await extract_links_from_card()
-                    added = 0
-                    for l in new_links:
-                        if l not in all_jobs:
-                            all_jobs.add(l)
-                            added += 1
-                    if added > 0:
-                        self.logger.info(f"🔗 Added {added} visible jobs (total {len(all_jobs)})")
-
-                    # Step 2: click “>” to reveal hidden jobs
-                    prev_hash = ""
-                    for click_idx in range(1, 25):  # safety cap
+                    # --- carousel jobs (“>” button)
+                    for click_idx in range(1, 10):
                         try:
                             next_btn = await card.query_selector(
                                 "button:not([disabled]):has(svg path[d*='7.5 7.5-7.5'])"
                             )
                             if not next_btn:
                                 break
-
                             html_before = await card.inner_html()
                             prev_hash = hashlib.md5(html_before.encode("utf-8")).hexdigest()
 
                             await next_btn.click(force=True)
-                            await asyncio.sleep(1.3)
+                            await asyncio.sleep(1.8)
 
                             html_after = await card.inner_html()
                             after_hash = hashlib.md5(html_after.encode("utf-8")).hexdigest()
                             if after_hash == prev_hash:
-                                break  # no content change
+                                break
 
-                            links_after = await extract_links_from_card()
-                            fresh = sum(1 for l in links_after if l not in all_jobs)
-                            for l in links_after:
-                                all_jobs.add(l)
-                            if fresh > 0:
-                                self.logger.info(f"➡️ Click {click_idx}: +{fresh} new jobs (total {len(all_jobs)})")
-
-                        except Exception as e:
-                            self.logger.warning(f"⚠️ Click {click_idx} failed: {e}")
+                            anchors2 = await card.query_selector_all("a[href*='/viewjob/']")
+                            for a2 in anchors2:
+                                href2 = await a2.get_attribute("href")
+                                if href2:
+                                    full2 = urljoin(base_url, href2)
+                                    if full2 not in all_jobs:
+                                        all_jobs.add(full2)
+                                        new_added += 1
+                                        self.logger.info(f"➡️ Hidden job link: {full2}")
+                        except Exception:
                             break
+                except Exception as e:
+                    self.logger.debug(f"Card extract error: {e}")
+            return new_added
 
-                self.logger.info(f"🔽 Round {scroll_round} done — total links so far: {len(all_jobs)}")
+        # === Multi-pass zig-zag scroll ===
+        total_passes = 4          # You can raise this to 5–6 for 600 + jobs
+        scroll_steps = 40         # Number of downward scrolls per pass
+        for pass_idx in range(total_passes):
+            self.logger.info(f"🔁 Pass {pass_idx+1}/{total_passes} — scrolling ↓↓")
+            # Scroll top→bottom
+            await page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(2)
 
-            # === Finished infinite scrolling ===
-            self.logger.info(f"✅ Infinite scroll finished — {len(all_jobs)} total job URLs")
+            for i in range(scroll_steps):
+                await page.evaluate("window.scrollBy(0, window.innerHeight * 0.9)")
+                await asyncio.sleep(2.5)
+                await extract_from_visible_cards()
 
-            # === Save ===
-            output_file = os.path.join(self.res_dir, "job_links_all_safe_dynamic.json")
-            with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(sorted(all_jobs), f, ensure_ascii=False, indent=2)
-            self.logger.info(f"💾 Saved job links → {output_file}")
+            # Wait for any new cards (spinner)
+            try:
+                await page.wait_for_function(
+                    "() => !document.querySelector('div[role=\"status\"], div[class*=\"loading\"], div[class*=\"spinner\"]')",
+                    timeout=10000,
+                )
+            except Exception:
+                pass
 
-            await browser.close()
-        return list(all_jobs)
+            self.logger.info(f"🔁 Pass {pass_idx+1}: scrolling ↑↑ to re-render old cards")
+            # Scroll bottom→top
+            for i in range(scroll_steps):
+                await page.evaluate("window.scrollBy(0, -window.innerHeight * 0.9)")
+                await asyncio.sleep(1.8)
+                await extract_from_visible_cards()
+
+        # === Final double-check ===
+        await asyncio.sleep(3)
+        added_final = await extract_from_visible_cards()
+        self.logger.info(f"✅ Final check added {added_final} new jobs")
+
+        self.logger.info(f"🎯 Crawl complete — {len(all_jobs)} unique job URLs found")
+
+        # === Save results ===
+        os.makedirs(self.res_dir, exist_ok=True)
+        output_file = os.path.join(self.res_dir, "job_links_zigzag_full.json")
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(sorted(all_jobs), f, ensure_ascii=False, indent=2)
+        self.logger.info(f"💾 Saved job links → {output_file}")
+
+        await browser.close()
+
+    return list(all_jobs)
+
+
 
         
 
@@ -156,4 +166,3 @@ class HiringCaffeITCrawler(CrawlerBase):
                 self.logger.info(f"💾 Saved job data for {job_url}")
             except Exception as e:
                 self.logger.exception(f"❌ Failed to crawl {job_url}: {e}")
-

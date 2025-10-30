@@ -1,5 +1,5 @@
 # BROWSER CONFIGURATION
-BASE_URL : "https://hiring.cafe/"
+BASE_URL : "https://hiring.cafe/?searchState=%7B%22dateFetchedPastNDays%22%3A-1%7D"
 TIMEOUT : 100000 # seconds
 HEADERS:
   User-Agent: >-
