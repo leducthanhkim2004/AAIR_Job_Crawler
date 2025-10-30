@@ -94,7 +94,7 @@ Always run from the **repository root** to ensure package imports work properly.
 ### Full run (with async-safe entry)
 
 ```powershell
-python -m web_Crawler.crawl_website._hiring_caffe_IT_crawl
+python -m web_Crawler.crawl_website.main
 ```
 
 This command will:
