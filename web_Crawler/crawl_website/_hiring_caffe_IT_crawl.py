@@ -143,7 +143,7 @@ async def extract_all_job_links_safely(self):
 
         await browser.close()
 
-    return list(all_jobs)
+        return list(all_jobs)
 
 
 

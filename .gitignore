@@ -63,3 +63,24 @@ downloads/
 playwright_profile/
 crawled_data/
 playwright_profile/
+full_jobs_logs/
+data/
+
+# Additional data directories
+result_*/
+logs_*/
+data/
+full_jobs_*/
+
+# Local state
+*_state.json
+*_cookies.json
+
+# Browser profiles
+*_profile/
+playwright-*/
+
+# Temp and cache
+.cache/
+temp/
+tmp/

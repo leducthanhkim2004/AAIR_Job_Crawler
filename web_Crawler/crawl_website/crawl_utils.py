@@ -66,19 +66,70 @@ def parse_job_sections(html):
 
     # --- Basic Job Info ---
     title = soup.find("h2", class_="font-extrabold")
-    company = soup.find("span", class_="text-xl font-semibold")
-    location = soup.find("span", string=lambda t: t and "United States" in t)
+    #EXTRACT COMPANY NAME 
+    company = soup.find(
+        "span",
+        class_=lambda c: c and "text-xl" in c and "font-semibold" in c and "text-gray-700" in c
+    )
+    company_name = "N/A"
+    if company:
+        # Extract text safely and remove leading '@' and artifacts
+        text_parts = [t.strip() for t in company.stripped_strings if t.strip()]
+        company_name = " ".join(text_parts)
+        company_name = company_name.replace("@", "").strip()
+    
     salary = soup.find("span", string=lambda t: "$" in t)
     posted_text_node = soup.find(string=re.compile(r'\bPosted\b', re.I))
     posted_tag = posted_text_node.parent if posted_text_node else None
 
-    print(f"Posted tag found: {posted_tag}")
+    
     work_mode = soup.find("span", string=lambda t: t and any(x in t for x in ["Remote", "Onsite", "Hybrid"]))
     employment_type = soup.find("span", string=lambda t: t and any(x in t for x in ["Full Time", "Part Time","Temporary","Contract","All Commitments Available"]))
     
+    # --- Location parsing (fixed) ---
+    location = None
+    location_choices = []
+    
+    # Try to find location container with the map pin icon
+    loc_containers = soup.select('div.flex')
+    for container in loc_containers:
+        # Verify this div has the map pin SVG with the correct path pattern
+        svg = container.find('svg')
+        if not svg:
+            continue
+            
+        # Check if this is the location pin SVG by looking at its paths
+        paths = svg.find_all('path')
+        path_data = ' '.join(p.get('d', '') for p in paths)
+        # Location pin SVG has specific path data containing these patterns
+        if not ('M15 10.5a3 3 0' in path_data and 'M19.5 10.5c0 7.142' in path_data):
+            continue
+            
+        # Find the span next to SVG
+        span = container.find('span')
+        if not span:
+            continue
+            
+        # Skip loading placeholder
+        text = span.get_text(strip=True)
+        if not text or text.lower() in ('loading...', 'hiringcafe'):
+            continue
+            
+        # Found valid location text
+        if ' or ' in text:
+            location_choices = [loc.strip() for loc in text.split(' or ')]
+            location = location_choices[0]
+        else:
+            location = text
+            location_choices = [text]
+        break  # Found valid location, stop searching
+
+    # Store results
+    data["location"] = location if location else "N/A" 
+    data["location_choices"] = location_choices
+
     data["job_title"] = title.get_text(strip=True) if title else "N/A"
-    data["company"] = company.get_text(strip=True).replace("@", "").strip() if company else "N/A"
-    data["location"] = location.get_text(strip=True) if location else "N/A"
+    data["company"] = company_name#extract company name
     data["salary"] = salary.get_text(strip=True) if salary else "N/A"
     data["work_mode"] = work_mode.get_text(strip=True) if work_mode else "N/A"
     data["employment_type"] = employment_type.get_text(strip=True) if employment_type else "N/A"
@@ -130,10 +181,13 @@ def parse_company_info_table(html):
 async def crawl_full_job_with_tabs(job_url):
     """Async version: render a full job page and extract Job Info + Company Info + Job Description + Website."""
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         page = await browser.new_page()
         print(f"🌐 Opening {job_url}")
-        await page.goto(job_url, wait_until="networkidle", timeout=60000)
+        
+        # Increase initial page load timeout and wait
+        await page.goto(job_url, wait_until="networkidle", timeout=90000)
+        await page.wait_for_timeout(3000)  # Initial wait for JS to settle
 
         result = {"job_url": job_url}
 
@@ -141,21 +195,41 @@ async def crawl_full_job_with_tabs(job_url):
         html_job = await page.content()
         result.update(parse_job_sections(html_job))
 
-        # --- Tab 2: Company Info ---
+        # --- Tab 2: Company Info (improved) ---
         try:
-            await page.click("text=Company Info")
-            await page.wait_for_timeout(3000)
-            html_company = await page.content()
-            company_data = parse_company_info_table(html_company)
-            result["company_info"] = company_data
+            # Click Company Info tab with retry
+            for attempt in range(3):
+                try:
+                    await page.click("text=Company Info", timeout=5000)
+                    # Wait for table to appear
+                    await page.wait_for_selector("table.table-auto", timeout=5000)
+                    await page.wait_for_timeout(2000)  # Additional wait for content
+                    
+                    html_company = await page.content()
+                    company_data = parse_company_info_table(html_company)
+                    
+                    # Verify we got actual data
+                    if company_data and not isinstance(company_data, str) and len(company_data) > 0:
+                        result["company_info"] = company_data
+                        break
+                    else:
+                        print(f"⚠️ Company Info attempt {attempt+1}: Empty data, retrying...")
+                        await page.wait_for_timeout(2000)
+                except Exception as e:
+                    print(f"⚠️ Company Info attempt {attempt+1} failed: {e}")
+                    await page.wait_for_timeout(2000)
+            else:
+                print("❌ All attempts to get company info failed")
+                result["company_info"] = "N/A"
         except Exception as e:
-            print(f"⚠️ Company Info parsing failed: {e}")
+            print(f"⚠️ Company Info section failed: {e}")
             result["company_info"] = "N/A"
 
-        # --- Tab 3: Job Description ---
+        # --- Tab 3: Job Description (improved) ---
         try:
-            await page.click("text=Job Description")
-            await page.wait_for_timeout(2000)
+            await page.click("text=Job Description", timeout=5000)
+            await page.wait_for_timeout(3000)
+            await page.wait_for_selector("div.flex.flex-col", timeout=5000)
             html_desc = await page.content()
             soup_desc = BeautifulSoup(html_desc, "html.parser")
             desc_section = soup_desc.find("div", class_="flex flex-col")
@@ -257,5 +331,6 @@ async def crawl_full_job_with_tabs(job_url):
             print(f"⚠️ Website extraction failed: {e}")
             result["company_website"] = "N/A"
 
+        await page.wait_for_timeout(1000)  # Final wait before closing
         await browser.close()
         return result
